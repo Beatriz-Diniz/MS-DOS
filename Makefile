@@ -29,15 +29,15 @@ bin = boot.img
 
 # Stage 1 uses some basic functions implemented in utils.c
 
-stage1_obj = stage1.o utils.o
+bootloader_obj = bootloader.o utils.o
 
 # Stage 2 also uses utils.c, but includes a lot more implemented in tyos.c
 
-stage2_obj = stage2.o utils.o 
+kernel_obj = kernel.o syscall.o
 
-# Size of stage2 in 512-byte sectors
+# Size of kernel in 512-byte sectors
 
-STAGE2_SIZE=1
+KERNEL_SIZE=1
 
 
 AUXDIR =../../tools#
@@ -76,15 +76,16 @@ endif
 ## First and second stage, plus auxiliary items.
 ## 
 
-boot_obj = stage1.o stage2.o utils.o
+boot_obj = bootloader.o kernel.o utils.o syscall.o runtime.o tyos.o mbr.o
 
 boot.bin : $(boot_obj) boot.ld rt0.o
 	ld -melf_i386 --orphan-handling=discard  -T boot.ld $(boot_obj) -o $@
 
-stage1.o stage2.o utils.o :%.o: %.c
+bootloader.o kernel.o utils.o syscall.o runtime.o tyos.o mbr.o : %.o: %.c
 	gcc -m16 -O0 -I. -Wall -fno-pic -fcf-protection=none  --freestanding -c $<  -o $@
 
-stage1.o stage2.o utils.o : utils.h
+bootloader.o kernel.o utils.o  : utils.h
+kernel.o syscall.o runtime.o : syscall.h
 
 rt0.o : rt0.S
 	gcc -m16 -O0 -Wall -c $< -o $@
@@ -121,7 +122,7 @@ clean-extra:
 # Programming exercise
 #
 
-EXPORT_FILES  = utils.c  utils.h rt0.S  stage1.c  stage2.c  boot.ld
+EXPORT_FILES  = utils.c  utils.h rt0.S  bootloader.c  kernel.c  boot.ld
 EXPORT_FILES += Makefile
 EXPORT_FILES += README ../../tools/COPYING 
 
@@ -180,13 +181,159 @@ clean-export:
 .PHONY: syseg-export export clean-export
 
 
+
+
+# Include Make Bintools
+
+# ------------------------------------------------------------
+# The following excerpt of code was copied from MakeBintools,
+# part of SYSeg, Copyright 2001 Monaco F. J..
+# MakeBintools is a collection of handy 'GNU make' rules for
+# inspecting and comparing the contents of source and object files.
+# Further information: http://gitlab.com/monaco/syseg
+
+
 ##
 ## Configuration
 ##
 
 
+# Inform your preferred graphical diff tool e.g meld, kdiff3 etc.
+
+DIFF_TOOL=meld
+
+
+##
+## You probably don't need to change beyond this line
+##
+
+# Disassemble
+
+# ALT = intel | att  (default: att)
+
+ifndef ASM
+ifeq (,$(findstring intel, $(MAKECMDGOALS)))
+ASM_SYNTAX = att
+else
+ASM_SYNTAX = intel
+endif
+else
+ASM_SYNTAX= $(ASM)
+endif
+
+# BIT = 16 | 32  (default: 32)
+
+ifndef BIT
+ifeq (,$(findstring 16, $(MAKECMDGOALS)))
+ASM_MACHINE = i386
+else
+ASM_MACHINE = i8086
+endif
+else
+
+ifeq ($(BIT),16)
+ASM_MACHINE = i8086
+else
+ASM_MACHINE = i386
+endif
+
+endif
+
+
+intel att 16 32: 
+	@echo > /dev/null
+
+##
+## Options
+##
+
+opts = $(filter .optnop, $(MAKECMDGOALS))
+symbol = $(filter ..%, $(MAKECMDGOALS))
+
+$(opts) $(symbol):
+	@echo > /dev/null
+
+objdump_nop = "cat"
+objdump_disassemble = "-d"
+
+#
+# Disassemble options
+#
+
+ifneq (,$(filter d diss d* diss*, $(MAKECMDGOALS)))
+
+
+ifneq (,$(findstring .optnop, $(opts)))
+objdump_nop = "sed 's/:\(\t.*\t\)/:    /g'"
+endif
+
+ifneq (,$(symbol))
+objdump_disassemble = "--disassemble=$(symbol:..%=%)"
+endif
+
+endif
+
+
+#
+# Disassemble
+#
+
+diss d diss* d* : baz=$(bar)
+
+diss d diss* d*: $(IMG) 
+	@objdump -f $< > /dev/null 2>&1; \
+	if test $$? -eq 1   ; then \
+	  objdump -M $(ASM_SYNTAX) -b binary -m $(ASM_MACHINE) -D $< | "$(objdump_nop)"; \
+	else \
+	  if test $@ = "diss" || test $@ = "d" ; then\
+	   objdump -M $(ASM_SYNTAX) -m $(ASM_MACHINE) $(objdump_disassemble) $<  | "$(objdump_nop)" ;\
+	  else\
+	    objdump -M $(ASM_SYNTAX) -m $(ASM_MACHINE) -D $< | "$(objdump_nop)" ; \
+	 fi;\
+	fi
+
+%/diss %/d %/diss* %/d*: %
+	make $(@F) IMG=$< $(filter 16 32 intel att $(opts) $(symbol), $(MAKECMDGOALS)) 
+
+%/i16 %/16i : %
+	make --quiet $</diss intel 16 $(opts) $(symbol)
+%/i32 %/32i %/i: %
+	make --quiet $</diss intel 32 $(opts) $(symbol)
+%/a16 %/16a %/16 : %
+	make --quiet $</diss att 16 $(opts) $(symbol)
+%/a32 %/32a %/32 %/a: %
+	make --quiet $</diss att 32 $(opts) $(symbol)
+
+%/i16* %/16i* : %
+	make --quiet $</diss* intel 16 $(opts) $(symbol)
+%/i32* %/32i* %/i*: %
+	make --quiet $</diss* intel 32 $(opts) $(symbol)
+%/a16* %/16a* %/16* : %
+	make --quiet $</diss* att 16 $(opts) $(symbol)
+%/a32* %/32a* %/32* %/a*: %
+	make --quiet $</diss* att 32 $(opts) $(symbol)
+
+##
 ## Run on the emulator
 ##
+
+# 
+#
+# %/run : %
+# 	@i=$< &&\
+# 	if test $${i##*.} = "img"; then\
+# 	    make run-fd IMG=$<;\
+# 	 else\
+# 	   if test $${i##*.} = "bin"; then\
+# 	     make run-bin IMG=$<;\
+# 	    fi;\
+# 	fi
+#
+# %/bin : %
+# 	make run-bin IMG=$<
+#
+# %/fd : %
+# 	make run-fd IMG=$<
 
 %/run : %
 	make run IMG=$<
@@ -207,6 +354,89 @@ run-iso: $(IMG)
 run-fd : $(IMG)
 	qemu-system-i386 -drive format=raw,file=$< -net none
 	@echo "Shortcut run-fd is deprecated: use 'make run' instead."
+
+
+
+# Dump contents in hexadecimal
+
+hex raw dump: $(IMG)
+	hexdump -C $<
+
+
+%/hex %raw %/dump : %
+	make --quiet dump IMG=$< 
+
+
+# Diff-compare
+
+
+MISSING_DIFF_TOOL="Can't find $(DIFF_TOOL); please edit syseg/tools/bintools.m4"
+
+# Compare objects
+
+objdiff bindiff : $(wordlist 2, 4, $(MAKECMDGOALS))
+	if  test -z $$(which $(DIFF_TOOL)); then echo $(MISSING_DIFF_TOOL); exit 1; fi
+	if test $(words $^) -lt 4 ; then\
+	  bash -c "$(DIFF_TOOL) <(make $(wordlist 1,1,$^)/diss $(ASM) $(BIT)) <(make $(wordlist 2,2,$^)/diss $(ASM) $(BIT))";\
+	else\
+	  bash -c "$(DIFF_TOOL) <(make $(wordlist 1,1,$^)/diss $(ASM) $(BIT)) <(make $(wordlist 2,2,$^)/diss $(ASM) $(BIT)) <(make $(wordlist 3,3,$^)/diss $(ASM) $(BIT))";\
+	fi
+
+# Compare sources
+
+srcdiff : $(wordlist 2, 4, $(MAKECMDGOALS))
+	if  test -z $$(which $(DIFF_TOOL)); then echo $(MISSING_DIFF_TOOL); exit 1; fi
+	if test $(words $^) -lt 3 ; then\
+	  bash -c "$(DIFF_TOOL) $(wordlist 1,1,$^) $(wordlist 2,2,$^)";\
+	else\
+	  bash -c "$(DIFF_TOOL) $(wordlist 1,1,$^) $(wordlist 2,2,$^) $(wordlist 3,3,$^)";\
+	fi
+
+# Compare hex
+
+hexdiff : $(wordlist 2, 4, $(MAKECMDGOALS))
+	if  test -z $$(which $(DIFF_TOOL)); then echo $(MISSING_DIFF_TOOL); exit 1; fi
+	if test $(words $^) -lt 4 ; then\
+	  bash -c "$(DIFF_TOOL) <(make $(wordlist 1,1,$^)/hex $(ASM) $(BIT)) <(make $(wordlist 2,2,$^)/hex $(ASM) $(BIT))";\
+	else\
+	  bash -c "$(DIFF_TOOL) <(make $(wordlist 1,1,$^)/hex $(ASM) $(BIT)) <(make $(wordlist 2,2,$^)/hex $(ASM) $(BIT)) <(make $(wordlist 3,3,$^)/hex $(ASM) $(BIT))";\
+	fi
+
+
+# Compare objects and sources
+
+diff : $(word 2, $(MAKECMDGOALS))
+	@echo $(wordlist 2, 4, $(MAKECMDGOALS))
+	@EXT=$(suffix $<);\
+	case $$EXT in \
+	.bin | .o)\
+		make --quiet objdiff $(wordlist 2, 4, $(MAKECMDGOALS))\
+		;;\
+	.asm | .S | .s | .i | .c | .h | .hex)\
+		make --quiet srcdiff $(wordlist 2, 4, $(MAKECMDGOALS))\
+		;;\
+	.img )\
+		make --quiet hexdiff $(wordlist 2, 4, $(MAKECMDGOALS))\
+		;;\
+	*)\
+		echo "I don't know how to compare filetype $$EXT"\
+		;;\
+	esac
+
+
+# Choose between intel|att and 16-bit|32-bot
+
+diffi16 di16 i16:
+	make --quiet diff $(wordlist 2, 4, $(MAKECMDGOALS)) ASM=intel BIT=16
+
+diffi32 di32 i32:
+	make --quiet diff $(wordlist 2, 4, $(MAKECMDGOALS)) ASM=intel BIT=32
+
+diffa16 da16 a16:
+	make --quiet diff $(wordlist 2, 4, $(MAKECMDGOALS)) ASM=att BIT=16
+
+diffa32 da32 a32:
+	make --quiet diff $(wordlist 2, 4, $(MAKECMDGOALS)) ASM=att BIT=32
 
 ##
 ## Create bootable USP stick if BIOS needs it
@@ -232,4 +462,9 @@ stick: $(IMG)
 
 
 .PHONY: clean clean-extra intel att 16 32 diss /diss /i16 /i32 /a16 /a32
+
+
+# End of MakeBintools.
+# -------------------------------------------------------------
+
 

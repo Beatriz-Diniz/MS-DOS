@@ -49,7 +49,7 @@ void init();
 
 int main(){
         clear();
-        echo(" Stage 1: loading second stage..." NL NL);
+        print(" Stage 1: loading second stage..." NL NL);
         load_stage2();
 
         /* Call init() in stage2 */

@@ -1,7 +1,9 @@
 #include <utils.h>
 
+char nl[] = {'\r', '\n', 0x0};
+
 /* Prints string in buffer on the screen */
-void __attribute__((fastcall, naked)) echo(const char* buffer){
+void __attribute__((fastcall, naked)) print(const char* buffer){
     __asm__(
             "   pusha                       ;" /* Save all registers */
             "   mov     %cx, %bx            ;"
@@ -22,8 +24,8 @@ void __attribute__((fastcall, naked)) echo(const char* buffer){
 
 /* For debugging */
 void __attribute__((naked, fastcall)) fatal(const char *msg){
-    echo(msg);
-    echo(NL);
+    print(msg);
+    print(NL);
 
     __asm__(
             "fatal_halt2:           ;" /* Halt the CPU */

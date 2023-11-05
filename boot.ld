@@ -10,7 +10,7 @@ SECTIONS{
 	.text :
 	{
 		rt0.o (.text .data .bss .rodata)
-		stage1.o (.text .data .bss .rodata)
+		bootloader.o (.text .data .bss .rodata)
 		utils.o (.text .data .bss .rodata)
 	}
 
@@ -30,7 +30,11 @@ SECTIONS{
 	/* Stage 2*/
 	.text2 :
 	{
-		stage2.o (.text .data .bss .rodata)
+		kernel.o (.text .data .bss .rodata)
+		syscall.o (.text .data .bss .rodata)
+		runtime.o (.text .data .bss .rodata)
+		tyos.o (.text .data .bss .rodata)
+		mbr.o (.text .data .bss .rodata)
 	}
 
 	_STAGE2_SIZE = . - _STAGE2_ADDR;
