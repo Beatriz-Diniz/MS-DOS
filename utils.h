@@ -16,9 +16,6 @@ void __attribute((naked, fastcall)) print (const char *str);
 extern char nl[];
 #define printnl(str) do{print(str); print (nl);}while(0)
 
-/* Read standard input into buffer. */
-void __attribute__((naked, fastcall)) read (char *buffer);
-
 /* Clear the screen. */
 void __attribute__((naked, fastcall)) clear (void);
 

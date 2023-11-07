@@ -6,6 +6,7 @@
 /* Print the null-terminated buffer on standard output */
 void date();
 void time();
+void quit();
 
 /* Commands */
 
@@ -20,7 +21,9 @@ void time();
 
 /* Quit */
 #define QUIT_CMD "quit"
-#define quit() printnl("Actually, I can't close the program with this function... You'll need to click on the X.")
+
+/* Clear */
+#define CLEAR_CMD "clear"
 
 #define NOT_FOUND " command not found"
 

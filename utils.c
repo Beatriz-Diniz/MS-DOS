@@ -41,8 +41,13 @@ void __attribute__((naked, fastcall)) clear(void){
             "   mov     $0x0600, %ax    ;" /* Video BIOS service: Scroll up */
             "   mov     $0x07, %bh      ;" /* Attribute (back/foreground) */
             "   mov     $0x0, %cx       ;" /* Upper-left corner */
-            "   mov     $0x184f, %dx    ;" /* Upper-right corner */
+            "   mov     $0x184f, %dx    ;" /* Lower-right corner */
             "   int     $0x10           ;" /* Call video BIOS service */
+            "   mov     $0x0200, %ax    ;" /* Set cursor position service */
+            "   xor     %bh, %bh        ;" /* Page number (0) */
+            "   xor     %dl, %dl        ;" /* Column (0) */
+            "   xor     %dh, %dh        ;" /* Row (0) */
+            "   int     $0x10           ;" /* Call video BIOS service to move cursor */
             "   popa                    ;" /* Pop all registers */
             "   ret                     ;" /* Return from function */
            );

@@ -54,7 +54,7 @@ int main(){
 
         /* Call init() in stage2 */
         init();
-        
+
         return 0;
 }
 
